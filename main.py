@@ -1,12 +1,16 @@
-# main.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 import string
 import platform  # Para detectar el sistema operativo
+
+# Importar los métodos existentes
 from northwest_corner.northwest_corner import northwest_corner_method
 from vogel_approximation.vogel_approximation import vogel_approximation_method
 from minimum_cost.minimum_cost import minimum_cost_method
+
+# Importar los nuevos métodos
+from sequential_steps.sequential_steps import sequential_steps_method
+from modified_distribution.modified_distribution import modified_distribution_method
 
 def calculate_cost(allocations, costs):
     total = 0
@@ -105,10 +109,14 @@ class TransportationProblemGUI:
         self.btn_nw = ttk.Button(self.methods_buttons_frame, text="Esquina Noroeste", command=lambda: self.display_method("Esquina Noroeste"))
         self.btn_vogel = ttk.Button(self.methods_buttons_frame, text="Vogel", command=lambda: self.display_method("Vogel"))
         self.btn_min_cost = ttk.Button(self.methods_buttons_frame, text="Costo Mínimo", command=lambda: self.display_method("Costo Mínimo"))
+        self.btn_seq_steps = ttk.Button(self.methods_buttons_frame, text="Pasos Secuenciales", command=lambda: self.display_method("Pasos Secuenciales"))
+        self.btn_mod_dist = ttk.Button(self.methods_buttons_frame, text="Distribución Modificada", command=lambda: self.display_method("Distribución Modificada"))
 
         self.btn_nw.pack(side="left", padx=5)
         self.btn_vogel.pack(side="left", padx=5)
         self.btn_min_cost.pack(side="left", padx=5)
+        self.btn_seq_steps.pack(side="left", padx=5)        # Nuevo botón
+        self.btn_mod_dist.pack(side="left", padx=5)         # Nuevo botón
 
         # Frame para tablas
         self.tables_frame = ttk.Frame(master)
@@ -196,11 +204,15 @@ class TransportationProblemGUI:
             nc_alloc = northwest_corner_method(costs, supply.copy(), demand.copy())
             v_alloc = vogel_approximation_method(costs, supply.copy(), demand.copy())
             mc_alloc = minimum_cost_method(costs, supply.copy(), demand.copy())
+            ss_alloc = sequential_steps_method(costs, supply.copy(), demand.copy())
+            md_alloc = modified_distribution_method(costs, supply.copy(), demand.copy())
 
             # Calcular costos
             nc_cost = calculate_cost(nc_alloc, costs)
             v_cost = calculate_cost(v_alloc, costs)
             mc_cost = calculate_cost(mc_alloc, costs)
+            ss_cost = calculate_cost(ss_alloc, costs)
+            md_cost = calculate_cost(md_alloc, costs)
 
             # Guardar resultados
             self.methods_results = {
@@ -215,6 +227,14 @@ class TransportationProblemGUI:
                 "Costo Mínimo": {
                     "alloc": mc_alloc,
                     "cost": mc_cost
+                },
+                "Pasos Secuenciales": {
+                    "alloc": ss_alloc,
+                    "cost": ss_cost
+                },
+                "Distribución Modificada": {
+                    "alloc": md_alloc,
+                    "cost": md_cost
                 }
             }
 
@@ -247,7 +267,9 @@ class TransportationProblemGUI:
         data_summary = [
             ["Esquina Noroeste", self.methods_results["Esquina Noroeste"]["cost"], len(self.methods_results["Esquina Noroeste"]["alloc"])],
             ["Vogel", self.methods_results["Vogel"]["cost"], len(self.methods_results["Vogel"]["alloc"])],
-            ["Costo Mínimo", self.methods_results["Costo Mínimo"]["cost"], len(self.methods_results["Costo Mínimo"]["alloc"])]
+            ["Costo Mínimo", self.methods_results["Costo Mínimo"]["cost"], len(self.methods_results["Costo Mínimo"]["alloc"])],
+            ["Pasos Secuenciales", self.methods_results["Pasos Secuenciales"]["cost"], len(self.methods_results["Pasos Secuenciales"]["alloc"])],
+            ["Distribución Modificada", self.methods_results["Distribución Modificada"]["cost"], len(self.methods_results["Distribución Modificada"]["alloc"])]
         ]
 
         ttk.Label(summary_frame, text="Comparación de Métodos", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=3, pady=5)
