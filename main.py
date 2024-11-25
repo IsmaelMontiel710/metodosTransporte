@@ -10,7 +10,7 @@ from minimum_cost.minimum_cost import minimum_cost_method
 
 # Importar los nuevos métodos
 from sequential_steps.sequential_steps import sequential_steps_method
-from modified_distribution.modified_distribution import modified_distribution_method
+from modified_distribution.modified_distribution import modified_distribution_method_with_prior  # Actualizado
 
 def calculate_cost(allocations, costs):
     total = 0
@@ -80,6 +80,40 @@ class ScrollableFrame(ttk.Frame):
         elif event.num == 5:
             self.canvas.yview_scroll(1, "units")
 
+class PriorMethodDialog:
+    """
+    Diálogo para seleccionar el método previo antes de ejecutar la Distribución Modificada.
+    """
+    def __init__(self, parent, methods):
+        self.top = tk.Toplevel(parent)
+        self.top.title("Seleccionar Método Previo")
+        self.top.grab_set()  # Hacer que el diálogo sea modal
+
+        ttk.Label(self.top, text="Seleccione un método previo:").pack(padx=20, pady=10)
+
+        self.selected_method = tk.StringVar()
+
+        for method in methods:
+            ttk.Radiobutton(self.top, text=method, variable=self.selected_method, value=method).pack(anchor=tk.W, padx=20)
+
+        btn_frame = ttk.Frame(self.top)
+        btn_frame.pack(pady=10)
+
+        ttk.Button(btn_frame, text="Aceptar", command=self.on_accept).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Cancelar", command=self.on_cancel).pack(side="left", padx=5)
+
+        self.result = None
+
+    def on_accept(self):
+        if self.selected_method.get():
+            self.result = self.selected_method.get()
+            self.top.destroy()
+        else:
+            messagebox.showwarning("Advertencia", "Por favor, seleccione un método previo.")
+
+    def on_cancel(self):
+        self.top.destroy()
+
 class TransportationProblemGUI:
     def __init__(self, master):
         self.master = master
@@ -128,6 +162,7 @@ class TransportationProblemGUI:
 
         # Inicializar variables para resultados
         self.methods_results = {}
+        self.prior_method_for_md = None  # Variable para almacenar el método previo seleccionado
 
     def create_tables(self):
         # Limpiar tablas anteriores
@@ -186,16 +221,19 @@ class TransportationProblemGUI:
                     val = float(e.get())
                     cost_row.append(val)
                 costs.append(cost_row)
+            self.costs = costs  # Almacenar costos para uso posterior
             # Obtener oferta
             supply = []
             for e in self.supply_entries:
                 val = float(e.get())
                 supply.append(val)
+            self.supply = supply  # Almacenar oferta para uso posterior
             # Obtener demanda
             demand = []
             for e in self.demand_entries:
                 val = float(e.get())
                 demand.append(val)
+            self.demand = demand  # Almacenar demanda para uso posterior
             # Verificar balance
             if sum(supply) != sum(demand):
                 messagebox.showerror("Error", "La oferta y la demanda no están balanceadas.")
@@ -205,14 +243,14 @@ class TransportationProblemGUI:
             v_alloc = vogel_approximation_method(costs, supply.copy(), demand.copy())
             mc_alloc = minimum_cost_method(costs, supply.copy(), demand.copy())
             ss_alloc = sequential_steps_method(costs, supply.copy(), demand.copy())
-            md_alloc = modified_distribution_method(costs, supply.copy(), demand.copy())
+            # Nota: No resolver Distribución Modificada aquí
 
             # Calcular costos
             nc_cost = calculate_cost(nc_alloc, costs)
             v_cost = calculate_cost(v_alloc, costs)
             mc_cost = calculate_cost(mc_alloc, costs)
             ss_cost = calculate_cost(ss_alloc, costs)
-            md_cost = calculate_cost(md_alloc, costs)
+            # Nota: Distribución Modificada se resolverá cuando el usuario la seleccione
 
             # Guardar resultados
             self.methods_results = {
@@ -231,11 +269,8 @@ class TransportationProblemGUI:
                 "Pasos Secuenciales": {
                     "alloc": ss_alloc,
                     "cost": ss_cost
-                },
-                "Distribución Modificada": {
-                    "alloc": md_alloc,
-                    "cost": md_cost
                 }
+                # "Distribución Modificada" se agregará posteriormente
             }
 
             # Mostrar resultados del método Esquina Noroeste por defecto
@@ -249,7 +284,29 @@ class TransportationProblemGUI:
             messagebox.showerror("Error", "Por favor, resuelve el problema primero.")
             return
 
-        self.current_method.set(method_name)
+        if method_name == "Distribución Modificada":
+            self.prior_method_for_md = self.prompt_prior_method()
+            if not self.prior_method_for_md:
+                # El usuario canceló la selección
+                return
+            prior_alloc = self.methods_results[self.prior_method_for_md]["alloc"]
+            try:
+                # Ejecutar Distribución Modificada con el método previo seleccionado
+                md_alloc = modified_distribution_method_with_prior(
+                    self.costs, self.supply.copy(), self.demand.copy(), prior_alloc
+                )
+                md_cost = calculate_cost(md_alloc, self.costs)
+                # Guardar el resultado de Distribución Modificada
+                self.methods_results["Distribución Modificada"] = {
+                    "alloc": md_alloc,
+                    "cost": md_cost
+                }
+            except ValueError as ve:
+                messagebox.showerror("Error en Distribución Modificada", str(ve))
+                return
+            self.current_method.set("Distribución Modificada")
+        else:
+            self.current_method.set(method_name)
 
         # Limpiar resultados anteriores
         for widget in self.results_frame.winfo_children():
@@ -264,13 +321,9 @@ class TransportationProblemGUI:
         summary_frame.pack(padx=10, pady=10, anchor='w')
 
         cols_summary = ["Método", "Costo Total", "Rutas Utilizadas"]
-        data_summary = [
-            ["Esquina Noroeste", self.methods_results["Esquina Noroeste"]["cost"], len(self.methods_results["Esquina Noroeste"]["alloc"])],
-            ["Vogel", self.methods_results["Vogel"]["cost"], len(self.methods_results["Vogel"]["alloc"])],
-            ["Costo Mínimo", self.methods_results["Costo Mínimo"]["cost"], len(self.methods_results["Costo Mínimo"]["alloc"])],
-            ["Pasos Secuenciales", self.methods_results["Pasos Secuenciales"]["cost"], len(self.methods_results["Pasos Secuenciales"]["alloc"])],
-            ["Distribución Modificada", self.methods_results["Distribución Modificada"]["cost"], len(self.methods_results["Distribución Modificada"]["alloc"])]
-        ]
+        data_summary = []
+        for method, result in self.methods_results.items():
+            data_summary.append([method, result["cost"], len(result["alloc"])])
 
         ttk.Label(summary_frame, text="Comparación de Métodos", font=('Helvetica', 14, 'bold')).grid(row=0, column=0, columnspan=3, pady=5)
 
@@ -288,7 +341,7 @@ class TransportationProblemGUI:
 
         # Crear Treeview para mostrar la matriz de costos con Demanda y Oferta
         sources_labels = [index_to_letter(i) for i in range(self.num_supply_val)]
-        destinations_labels = [index_to_letter(j) for j in range(self.num_demand_val)]  # Etiquetas corregidas
+        destinations_labels = [index_to_letter(j) for j in range(self.num_demand_val)]
 
         cols = ["Oferta/Demanda"] + destinations_labels + ["Oferta"]
         tree_cost = ttk.Treeview(cost_matrix_frame, columns=cols, show='headings', height=10)
@@ -296,12 +349,12 @@ class TransportationProblemGUI:
         for col in cols:
             tree_cost.heading(col, text=col)
             if col == "Oferta/Demanda":
-                tree_cost.column(col, anchor=tk.W, width=200)  # Alineación a la izquierda y ancho aumentado
+                tree_cost.column(col, anchor=tk.W, width=200)
             elif col == "Oferta":
-                tree_cost.column(col, anchor=tk.CENTER, width=120)  # Ancho aumentado
+                tree_cost.column(col, anchor=tk.CENTER, width=120)
             else:
                 tree_cost.column(col, anchor=tk.CENTER, width=80)
-        tree_cost.pack(padx=5, pady=5, fill="x")  # Usar fill="x" para expandirse horizontalmente
+        tree_cost.pack(padx=5, pady=5, fill="x")
 
         # Insertar filas con Oferta
         for i, row in enumerate([ [entry.get() for entry in row] for row in self.costs_entries]):
@@ -329,22 +382,23 @@ class TransportationProblemGUI:
         frame_alloc = ttk.LabelFrame(detail_frame, text="Asignaciones Detalladas")
         frame_alloc.pack(side="left", padx=5, pady=5, fill="both", expand=True)
 
-        cols_alloc = ["Proveedor", "Consumidor", "Cantidad", "Costo Unitario", "Costo Total"]
+        # Añadir una columna para el número de paso
+        cols_alloc = ["Paso", "Proveedor", "Consumidor", "Cantidad", "Costo Unitario", "Costo Total"]
         tree_alloc = ttk.Treeview(frame_alloc, columns=cols_alloc, show='headings', height=10)
         for col in cols_alloc:
             tree_alloc.heading(col, text=col)
-            tree_alloc.column(col, anchor=tk.CENTER, width=120)  # Ancho aumentado
+            tree_alloc.column(col, anchor=tk.CENTER, width=100)
         tree_alloc.pack(padx=5, pady=5, fill="both", expand=True)
 
         sources_labels = [index_to_letter(i) for i in range(self.num_supply_val)]
         destinations_labels = [index_to_letter(j) for j in range(self.num_demand_val)]
 
         total_method_cost = 0
-        for ((i, j), alloc_qty) in self.methods_results[method_name]["alloc"]:
+        for step, ((i, j), alloc_qty) in enumerate(self.methods_results[method_name]["alloc"], start=1):
             cost_unit = float(self.costs_entries[i][j].get())
             cost_total = alloc_qty * cost_unit
             total_method_cost += cost_total
-            tree_alloc.insert('', tk.END, values=(sources_labels[i], destinations_labels[j], alloc_qty, cost_unit, cost_total))
+            tree_alloc.insert('', tk.END, values=(step, sources_labels[i], destinations_labels[j], alloc_qty, cost_unit, cost_total))
         tree_alloc.pack(padx=5, pady=5, fill="both", expand=True)
 
         # Mostrar Costo Total
@@ -366,9 +420,9 @@ class TransportationProblemGUI:
         for col in ['Proveedor'] + destinations_labels + ['Total']:
             tree_grid.heading(col, text=col)
             if col == 'Proveedor':
-                tree_grid.column(col, anchor=tk.CENTER, width=120)  # Ancho aumentado
+                tree_grid.column(col, anchor=tk.CENTER, width=120)
             elif col == 'Total':
-                tree_grid.column(col, anchor=tk.CENTER, width=120)  # Ancho aumentado
+                tree_grid.column(col, anchor=tk.CENTER, width=120)
             else:
                 tree_grid.column(col, anchor=tk.CENTER, width=80)
         tree_grid.pack(padx=5, pady=5, fill="both", expand=True)
@@ -378,10 +432,14 @@ class TransportationProblemGUI:
             row_values = [sources_labels[i]] + cost_matrix[i] + [row_sums[i]]
             tree_grid.insert('', tk.END, values=row_values)
 
-    def demand_entries_vals(self, costs):
-        # Esta función extrae los valores de demanda ingresados por el usuario
-        # Se asume que la fila de demanda está después de las filas de oferta
-        return [float(e.get()) for e in self.demand_entries]
+    def prompt_prior_method(self):
+        """
+        Abre un diálogo para que el usuario seleccione el método previo antes de Distribución Modificada.
+        Retorna el nombre del método seleccionado o None si se cancela.
+        """
+        dialog = PriorMethodDialog(self.master, ["Esquina Noroeste", "Vogel", "Costo Mínimo"])
+        self.master.wait_window(dialog.top)
+        return dialog.result
 
 def main():
     root = tk.Tk()
